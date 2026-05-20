@@ -1,23 +1,25 @@
-export NCCL_SOCKET_IFNAME=eth0
-export NCCL_IB_HCA=mlx5_2,mlx5_3
-export NCCL_IB_DISABLE=1
-export NCCL_DEBUG=INFO
+# 自动切换到项目根目录，确保所有相对路径正确
+SCRIPT_ABS_PATH="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+cd "$(dirname "$0")/../.."
+
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True  # 减少显存碎片
+export NCCL_SOCKET_IFNAME=eno1   # 本机网卡名，多机训练时改为对应 IB 网卡
+export NCCL_IB_DISABLE=1         # 无 InfiniBand，禁用
 export WANDB_API_KEY=wandb/api/key # replace with your wandb api key
-# used for check save when communication
-export NCCL_BLOCKING_WAIT=1
-export NCCL_ASYNC_ERROR_HANDLING=1
-export NCCL_TIMEOUT=1000  # timeout set to 1 hour (unit: seconds)
+export TORCH_NCCL_BLOCKING_WAIT=1
+export TORCH_NCCL_ASYNC_ERROR_HANDLING=1
+export NCCL_TIMEOUT=1000
 
 
 Framework_name=QwenMMDiT
-base_vlm=/path/to/pretrained/VLM
-vision_encoder_path=/path/to/pretrained/vision/encoder # should be the parent path of vision encoder ckpt
+base_vlm=/root/workspace/vla_repo/vla_data_repo/model_data/qwen
+vision_encoder_path=/root/workspace/vla_repo/vla_data_repo/model_data/dinov3-vits16/facebook # should be the parent path of vision encoder ckpt
 
 freeze_module_list='qwen_vl_interface,action_model.vision_encoder' # if you would like to directly train on the robocasa dataset, unfreeze vlm could obtain better performance
 DIT_TYPE="DiT-L"
 
 llavadata="asv2_conversation_en,asv2_detailed_description_en"
-data_root_dir=playground/demo_data
+data_root_dir=/root/workspace/LDA-1B/playground/demo_data
 data_mix=demo_data # should be recorded in data_config.py
 
 obs_horizon=1 # should be consistent with the data config, e.g., obs_horizon=1 means using the last observation to predict the next action
@@ -29,10 +31,11 @@ use_delta_action=false # set to true if would like to train the model to predict
 positional_embeddings=null
 TRAINING_TASK_WEIGHTS="[1,1,1,1]" # training task weights for 4 tasks: policy, forward_dynamics, inverse_dynamics, video_gen
 repeated_diffusion_steps=1
+return_vlm_inputs=false
 
 future_obs_index=5 # predict the future observation at this index, should be consistent with the data config
-run_root_dir=/path/to/save/training/results # replace with your own path
-run_id=/run/id
+run_root_dir=/root/workspace/vla_repo/xiaojichun/checkpoints/lda-1b # replace with your own path
+run_id=test_run # replace with your own run id
 
 pretrained_checkpoint=null # set to null if training from scratch
 
@@ -46,11 +49,11 @@ wandb_entity=your/wandb/entity
 output_dir=${run_root_dir}/${run_id}
 mkdir -p ${output_dir}
 # mv this script to the output dir
-cp $0 ${output_dir}/
+cp "${SCRIPT_ABS_PATH}" ${output_dir}/
 
 accelerate launch \
   --config_file lda/config/deepseeds/deepspeed_zero2.yaml \
-  --num_processes 8 \
+  --num_processes 1 \
   lda/training/train_LDA.py \
   --config_yaml lda/config/training/LDA_pretrain.yaml \
   --framework.name ${Framework_name} \
@@ -70,7 +73,7 @@ accelerate launch \
   --datasets.vla_data.data_root_dir ${data_root_dir} \
   --datasets.vla_data.training_task_weights ${TRAINING_TASK_WEIGHTS} \
   --datasets.vla_data.data_mix ${data_mix} \
-  --datasets.vla_data.per_device_batch_size 64 \
+  --datasets.vla_data.per_device_batch_size 4 \
   --datasets.vla_data.return_vlm_inputs ${return_vlm_inputs} \
   --trainer.freeze_modules ${freeze_module_list} \
   --trainer.max_train_steps 200000 \

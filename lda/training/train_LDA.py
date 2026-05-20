@@ -466,7 +466,8 @@ class VLATrainer(TrainerUtils):
                     "action_dit_loss": action_loss.cpu().item(),
                 }
         finally:
-            del output_dict
+            if 'output_dict' in locals():
+                del output_dict
 
     def _finalize_training(self):
         """training end processing"""
